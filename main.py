@@ -32,8 +32,8 @@ class GImageCategorizer:
         self.destination_folder_b = os.path.join(self.input_directory, self.folder_b)
         os.makedirs(self.destination_folder_a, exist_ok=True)
         os.makedirs(self.destination_folder_b, exist_ok=True)
-        self.folder_a_button.config(state="normal", command=self.copy_to_a)
-        self.folder_b_button.config(state="normal", command=self.copy_to_b)
+        self.folder_a_button.config(state="normal", command=self.move_to_a) # Dont forget to change if want to Copy/Move
+        self.folder_b_button.config(state="normal", command=self.move_to_b) # Dont forget to change if want to Copy/Move
 
     def select_directory(self):
         self.input_directory = filedialog.askdirectory()
@@ -45,7 +45,7 @@ class GImageCategorizer:
             self.set_config()
             self.display_image()
             self.images_left = len(self.image_list)
-            self.image_status['text'] = "{} images left".format(self.images_left) # Move feature only (not copy feature)
+            self.image_status['text'] = f"{self.images_left} images left" # Move feature only (not copy feature)
 
     def display_image(self):
         if self.current_image_index < len(self.image_list):
@@ -85,6 +85,7 @@ class GImageCategorizer:
         else:
             self.current_image_index += 1
             self.images_left -= 1
+            self.image_status['text'] = "{} images left".format(self.images_left)
             self.display_image()
 
 
