@@ -83,7 +83,7 @@ class Controller:
 
     def categorize(self, index: int) -> str | None:
         categories = self.model.categories
-        if not 0 <= index < len(categories):
+        if self.categorizer is None or not 0 <= index < len(categories):
             return None
         if self.model.current() is None:
             return None
@@ -145,12 +145,6 @@ class Controller:
 
     def categories(self) -> list[str]:
         return list(self.model.categories)
-
-    def rename_index_next(self) -> int:
-        # informational: next rename idx the pattern would produce (max over categories)
-        if self.categorizer and self.categorizer._rename_index:
-            return max(self.categorizer._rename_index.values()) + 1
-        return 1
 
     def save_all(self) -> None:
         settings_mod.save_settings(self.settings)

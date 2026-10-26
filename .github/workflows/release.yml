@@ -43,7 +43,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install flet
+      - run: pip install .
       - run: flet pack -n imagecategorizer main.py
         # `-n` documented for Windows exe; fallback rename guards naming drift
         # until first tag proves the output name.
@@ -63,7 +63,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install flet
+      - run: pip install .
       - run: flet pack -n imagecategorizer main.py
       - name: Build AppImage
         run: |

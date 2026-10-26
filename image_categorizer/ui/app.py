@@ -1,5 +1,6 @@
 import functools
 import io
+import os
 
 import flet as ft
 from PIL import Image
@@ -34,6 +35,12 @@ def main_page(page: ft.Page):
         build_thumb_strip(controller, page),
         build_meta_strip(controller, page),
     )
+
+    # Auto-resume: re-open last directory if it still exists
+    last = cfg.get("last_dir") or ""
+    if last and os.path.isdir(last):
+        _handle_open_dir(controller, page, last)
+
     page.update()
 
 
@@ -96,7 +103,7 @@ def _refresh(page, controller):
 
 def _dir_label(controller, page):
     if page.web:
-        return "Directory: not pickable in web mode (desktop only)"
+        return "Directory: type a path on the server to open"
     return f"Directory: {controller.source_dir or 'Pick a directory'}"
 
 
@@ -143,7 +150,20 @@ def build_app_bar(controller, page):
         page.update()
 
     actions = [counter, dir_text]
-    if not page.web:
+    if page.web:
+        # Web: paths resolve on the serving machine, so offer a text input
+        field = ft.TextField(
+            value=controller.source_dir or controller.settings.get("last_dir", ""),
+            width=320, dense=True,
+            tooltip="Directory path on the server machine",
+        )
+
+        def _open_web_dir(_e):
+            _handle_open_dir(controller, page, field.value or "")
+
+        _state["web_dir_field"] = field
+        actions += [field, ft.TextButton("Open", on_click=_open_web_dir)]
+    else:
         actions.append(
             ft.IconButton(
                 icon=ft.Icons.FOLDER_OPEN,
