@@ -15,6 +15,7 @@ class Viewer(tk.Canvas):
     def __init__(self, master, bg="black"):
         super().__init__(master, bg=bg, highlightthickness=0)
         self._pil = None
+        self._rotated = None
         self._rotate_deg = 0
         self._scale = 1.0
         self._x = self._y = 0  # top-left draw position
@@ -50,7 +51,7 @@ class Viewer(tk.Canvas):
     def _fit(self):
         if self._pil is None:
             return
-        self._rotated = self._pil.rotate(self._rotate_deg, expand=True) if self._rotate_deg else self._pil
+        self._rotated = self._pil.rotate(-self._rotate_deg, expand=True) if self._rotate_deg else self._pil
         can_w = max(self.winfo_width(), 1)
         can_h = max(self.winfo_height(), 1)
         w, h = fit_size(self._rotated.width, self._rotated.height, can_w, can_h)
