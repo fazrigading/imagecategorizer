@@ -1,3 +1,4 @@
+import functools
 import io
 
 import flet as ft
@@ -83,7 +84,7 @@ def _refresh(page, controller):
     _state["undo"].disabled = not controller.can_undo()
     _state["dir_text"].value = _dir_label(controller, page)
     _state["meta_strip"].visible = controller.meta_shown
-    _state["meta_text"].value = controller.describe_current()
+    _state["meta_text"].value = controller.describe_current() or ""
     _state["thumb_row"].controls = _thumb_controls(controller, page)
     page.update()
 
@@ -301,12 +302,12 @@ def _thumb_jump(controller, page, path):
     _refresh(page, controller)
 
 
+@functools.lru_cache(maxsize=40)
 def _thumb_bytes(path):
-    buf = io.BytesIO()
     try:
-        with Image.open(path) as img:
+        with Image.open(path) as img:  # cached: full decode only once per path
             img.thumbnail((90, 90))
-            img.save(buf, format="PNG")
+            img.save(buf := io.BytesIO(), format="PNG")
     except Exception:  # noqa: BLE001 — display-safe: drop thumbnail, keep app running
         return None
     return buf.getvalue()
@@ -314,7 +315,7 @@ def _thumb_bytes(path):
 
 def build_meta_strip(controller, page):
     text = ft.Text(
-        controller.describe_current(),
+        controller.describe_current() or "",
         selectable=True,
     )
     strip = ft.Container(content=text, visible=controller.meta_shown)
