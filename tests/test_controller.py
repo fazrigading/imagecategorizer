@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from image_categorizer import settings
@@ -86,3 +87,28 @@ def test_filter_via_thumbnails(tmp_path, monkeypatch):
     c.open_directory(str(src))
     c.filter_text = "img_1"
     assert c.thumbnails() == [str(src / "img_1.jpg")]
+
+
+def test_open_empty_dir_raises_after_last_dir_save(tmp_path, monkeypatch):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    c = _controller(tmp_path, monkeypatch)
+    with pytest.raises(ValueError):
+        c.open_directory(str(empty))
+    assert c.settings["last_dir"] == str(empty)
+    # last_dir persisted despite the failure; old session untouched
+    assert c.source_dir == ""
+
+
+def test_open_restores_bounds_guarded_cursor(tmp_path, monkeypatch):
+    src = _seed(tmp_path, 3)
+    src.mkdir(exist_ok=True)
+    settings.save_state(str(src), {"cursor": 99, "processed": ["x"]})
+    c = _controller(tmp_path, monkeypatch)
+    c.open_directory(str(src))
+    assert c.model.cursor == 0  # 99 out of bounds → reset
+    c.model.cursor = 2
+    settings.save_state(str(src), {"cursor": 2, "processed": []})
+    c2 = _controller(tmp_path, monkeypatch)
+    c2.open_directory(str(src))
+    assert c2.model.current() == str(src / "img_2.jpg")
