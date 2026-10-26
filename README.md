@@ -47,7 +47,7 @@ Then pick a directory with the folder button and work the keyboard.
 Known quirk: while the filter field (or a text input) has keyboard focus,
 the single-letter and digit shortcuts above still fire on the page — flet
 1.0.5 gives the app no way to detect which control is focused. Click
-outside (or press Escape) to blur the field before using the shortcuts.
+outside to blur the field before using the shortcuts.
 
 On-screen equivalents exist for everything: category buttons (1–9), Skip
 and Undo buttons, the filter field, the metadata strip toggle is implicit
