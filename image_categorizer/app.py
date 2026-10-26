@@ -1,109 +1,198 @@
-from tkinter import Tk, messagebox, filedialog, Button, Label
-from PIL import Image, ImageTk
-import os, shutil
+import os
+from tkinter import Tk, messagebox, filedialog, Button, Label, Frame, simpledialog
 
-from . import __version__
+from PIL import Image, ImageTk
+
+from . import __version__, settings
+from .categorizer import Categorizer
+from .model import SessionModel
+
+WINDOW_TITLE = f"Gading's Image Categorizer v{__version__}"
+
 
 class ImageCategorizerApp:
-    def __init__(self, root):
+    def __init__(self, root: Tk, viewer=None):
         self.root = root
-        self.root.title("Gading's Image Categorizer v1.0")
+        self.root.title(WINDOW_TITLE)
         self.root.geometry("1600x800")
-        self.current_image_index = 0
-        self.current_image_path = ""
-        self.original_file_path = ""
-        self.image_list = []
-        self.folder_a = "infected"
-        self.folder_b = "normal"
+        self.settings = settings.load_settings()
+        self.model = SessionModel()
+        self.model.categories = list(self.settings["categories"])
+        self.model.mode = self.settings["mode"]
+        self.source_dir = ""
+        self.categorizer = None
+        self.viewer = viewer
         self.photo = None
 
-        self.image_label = Label(self.root)
-        self.image_label.pack()
+        self.top_bar = Frame(self.root)
+        self.top_bar.pack(side="top", fill="x")
+        self.select_button = Button(self.top_bar, text="Select Directory", command=self.select_directory)
+        self.select_button.pack(side="left")
+        self.mode_button = Button(self.top_bar, text="Mode: Move (click to toggle)", command=self.toggle_mode)
+        self.mode_button.pack(side="left", padx=5)
+        self.undo_button = Button(self.top_bar, text="Undo (u)", state="disabled", command=self.undo)
+        self.undo_button.pack(side="left")
 
-        self.select_button = Button(self.root, text="Select Directory", command=self.select_directory)
-        self.folder_a_button = Button(self.root, text="Infected", state="disabled")
-        self.folder_b_button = Button(self.root, text="Normal", state="disabled")
-        self.select_button.pack()
-        self.folder_a_button.pack()
-        self.folder_b_button.pack()
+        self.cat_bar = Frame(self.root)
+        self.cat_bar.pack(side="top", fill="x")
+        self.add_category_button = Button(self.cat_bar, text="+ Add category", command=self.add_category_dialog)
+        self.add_category_button.pack(side="left")
+        self.cat_buttons = {}
+        self._rebuild_category_buttons()
 
-        self.image_status = Label(self.root, text="0 images left")
-        self.image_status.pack()
+        if self.viewer is None:
+            self.image_label = Label(self.root)
+            self.image_label.pack(expand=True, fill="both")
 
-        self.root.bind('<Key>', self.handle_key_event)
+        self.image_status = Label(self.root, text="Select a directory")
+        self.image_status.pack(side="bottom")
+
+        for key in "123456789":
+            self.root.bind(f"<Key-{key}>", lambda e, k=int(key): self.on_category_key(k))
+        self.root.bind("<Key-s>", lambda e: self.skip())
+        self.root.bind("<Key-u>", lambda e: self.undo())
         self.root.focus_set()
 
-    def set_config(self):
-        self.destination_folder_a = os.path.join(self.input_directory, self.folder_a)
-        self.destination_folder_b = os.path.join(self.input_directory, self.folder_b)
-        os.makedirs(self.destination_folder_a, exist_ok=True)
-        os.makedirs(self.destination_folder_b, exist_ok=True)
-        self.folder_a_button.config(state="normal", command=self.move_to_a) # Dont forget to change if want to Copy/Move
-        self.folder_b_button.config(state="normal", command=self.move_to_b) # Dont forget to change if want to Copy/Move
+        if self.settings["last_dir"] and os.path.isdir(self.settings["last_dir"]):
+            self.open_directory(self.settings["last_dir"])
 
+    # -- sessions ------------------------------------------------------------
     def select_directory(self):
-        self.input_directory = filedialog.askdirectory()
-        if self.input_directory:
-            self.image_list = os.listdir(self.input_directory)
-            # print(len(self.image_list))
-            # self.image_list = [x for x in self.image_list if x.endswith(('.JPG', '.jpeg','.png'))]
-            self.image_list = [os.path.join(self.input_directory, filename) for filename in self.image_list if filename.endswith(('.JPG', '.jpeg','.png'))]
-            self.set_config()
-            self.display_image()
-            self.images_left = len(self.image_list)
-            self.image_status['text'] = f"{self.images_left} images left" # Move feature only (not copy feature)
+        chosen = filedialog.askdirectory(initialdir=self.settings["last_dir"] or os.path.expanduser("~"))
+        if chosen:
+            self.open_directory(chosen)
 
-    def display_image(self):
-        if self.current_image_index < len(self.image_list):
-            self.current_image_path = self.image_list[self.current_image_index]
-            image = Image.open(self.current_image_path)
-            # image.thumbnail(image.size)
-            image = image.resize((int(image.size[0] * 1.75), int(image.size[1] * 1.75)))
-            self.photo = ImageTk.PhotoImage(image)
-            self.image_label.configure(image=self.photo)
-            # self.image_label.image = photo
+    def open_directory(self, directory: str):
+        self.source_dir = directory
+        if self.settings["use_subfolders"]:
+            subdirs = sorted(
+                (
+                    d
+                    for d in os.listdir(directory)
+                    if os.path.isdir(os.path.join(directory, d)) and not d.startswith(".")
+                ),
+                key=str.lower,
+            )
+            self.model.categories = subdirs or list(self.settings["categories"])
         else:
-            messagebox.showinfo("Gading's Image Categorizer v1.0", "No more images.")
-
-    def copy_to_a(self):
-        return self.copy_to_folder(self.destination_folder_a)
-
-    def copy_to_b(self):
-        return self.copy_to_folder(self.destination_folder_b)
-
-    def copy_to_folder(self, destination_folder):
-        destination_path = os.path.join(destination_folder, os.path.basename(self.current_image_path))
-        shutil.copy2(self.original_file_path, destination_path)
-        self.current_image_index += 1
+            self.model.categories = list(self.settings["categories"])
+        self.model.load_images(directory)
+        state = settings.load_state(directory)
+        cursor = state.get("cursor")
+        self.model.processed = set(state.get("processed", []))
+        self.model.cursor = cursor if isinstance(cursor, int) and 0 <= cursor < len(self.model.images) else 0
+        self.categorizer = Categorizer(self.model, rename_pattern=self.settings["rename_pattern"])
+        self._rebuild_category_buttons()
+        self._refresh_status()
         self.display_image()
+        self.settings["last_dir"] = directory
+        settings.save_settings(self.settings)
+        if self.model.finished():
+            messagebox.showinfo(WINDOW_TITLE, "No more images.")
 
-    def move_to_a(self):
-        return self.move_to_folder(self.destination_folder_a)
+    # -- actions ---------------------------------------------------------------
+    def on_category_key(self, idx: int):
+        if idx <= len(self.model.categories):
+            self.handle_category(self.model.categories[idx - 1])
 
-    def move_to_b(self):
-        return self.move_to_folder(self.destination_folder_b)
-
-    def move_to_folder(self, destination_folder):
-        destination_path = os.path.join(destination_folder, os.path.basename(self.current_image_path))
+    def handle_category(self, category: str):
+        if self.categorizer is None:
+            return
         try:
-            os.rename(self.current_image_path, destination_path)
+            self.categorizer.handle(category, self.source_dir)
         except OSError as e:
-            messagebox.showerror("Image Viewer", f"Error moving image: {str(e)}")
-        else:
-            self.current_image_index += 1
-            self.images_left -= 1
-            self.image_status['text'] = "{} images left".format(self.images_left)
-            self.display_image()
+            messagebox.showerror(WINDOW_TITLE, f"Error moving image: {e}")
+            return
+        self._refresh_status()
+        self.display_image()
+        settings.save_state(self.source_dir, self._state())
+        if self.model.finished():
+            messagebox.showinfo(WINDOW_TITLE, "No more images.")
 
-    def handle_key_event(self, event):
-        if event.keysym == 'o':
-            self.move_to_a()
-        elif event.keysym == 'p':
-            self.move_to_b()
+    def skip(self):
+        if self.categorizer is None or self.model.finished():
+            return
+        self.categorizer.skip(self.source_dir)
+        self._refresh_status()
+        self.display_image()
+        settings.save_state(self.source_dir, self._state())
+
+    def undo(self):
+        if self.categorizer is None:
+            return
+        action = self.categorizer.undo()
+        if action is not None:
+            self._refresh_status()
+            self.display_image()
+            settings.save_state(self.source_dir, self._state())
+
+    def toggle_mode(self):
+        self.model.mode = "copy" if self.model.mode == "move" else "move"
+        self.mode_button.config(text=f"Mode: {self.model.mode.capitalize()} (click to toggle)")
+        self.settings["mode"] = self.model.mode
+        settings.save_settings(self.settings)
+
+    def _state(self) -> dict:
+        return {"cursor": self.model.cursor, "processed": sorted(self.model.processed)}
+
+    def _refresh_status(self):
+        self.image_status["text"] = f"{self.model.remaining()} images left"
+        if self.categorizer is not None:
+            self.undo_button.config(state="disabled" if not self.categorizer.undo_log else "normal")
+
+    # -- categories --------------------------------------------------------------
+    def _rebuild_category_buttons(self):
+        for btn in self.cat_buttons.values():
+            btn.destroy()
+        self.cat_buttons.clear()
+        enabled = "normal" if self.categorizer is not None else "disabled"
+        for i, cat in enumerate(self.model.categories):
+            key = str(i + 1) if i < 9 else ""
+            text = f"{cat} ({key})" if key else cat
+            btn = Button(self.cat_bar, text=text, state=enabled, command=lambda c=cat: self.handle_category(c))
+            btn.pack(side="left", padx=2)
+            self.cat_buttons[cat] = btn
+        # legacy aliases from v1: only meaningful for exactly two categories
+        self.root.unbind("<Key-o>")
+        self.root.unbind("<Key-p>")
+        if len(self.model.categories) >= 2:
+            self.root.bind("<Key-o>", lambda e: self.handle_category(self.model.categories[0]))
+            self.root.bind("<Key-p>", lambda e: self.handle_category(self.model.categories[1]))
+
+    def add_category_dialog(self):
+        if not self.source_dir:
+            return
+        name = simpledialog.askstring("Add category", "Category name:", parent=self.root)
+        if not name:
+            return
+        name = name.strip()
+        if not name or "/" in name or name.startswith(".") or name in self.model.categories:
+            messagebox.showerror("Invalid", f"'{name}' is not an acceptable category name.")
+            return
+        self.model.categories.append(name)
+        self.settings["categories"] = list(self.model.categories)
+        settings.save_settings(self.settings)
+        os.makedirs(os.path.join(self.source_dir, name), exist_ok=True)
+        self._rebuild_category_buttons()
+
+    # -- display -----------------------------------------------------------------
+    def display_image(self):
+        if self.viewer is not None:
+            self.viewer.show(self.model.current())
+            return
+        if self.model.current() is None:
+            self.photo = None
+            self.image_label.configure(image="", text="No more images.")
+            return
+        image = Image.open(self.model.current())
+        image = image.resize((int(image.size[0] * 1.75), int(image.size[1] * 1.75)))
+        self.photo = ImageTk.PhotoImage(image)
+        self.image_label.configure(image=self.photo)
+
 
 def main():
     root = Tk()
-    app = ImageCategorizerApp(root)
+    ImageCategorizerApp(root)
     root.configure(background="black")
     root.mainloop()
 
