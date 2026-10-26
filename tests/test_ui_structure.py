@@ -10,7 +10,6 @@ def test_ui_imports():
 
 
 def test_controller_hot_path_ui_free():
-    import ast  # noqa: F401 - kept per plan brief
     from pathlib import Path
     src = Path("image_categorizer/controller.py").read_text()
     assert "import flet" not in src, "controller must stay framework-free"

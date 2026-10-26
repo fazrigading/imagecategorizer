@@ -4,7 +4,8 @@ from image_categorizer import settings as settings_mod
 from image_categorizer.controller import Controller
 from image_categorizer.ui import imagearea
 
-# Control references shared between builders and _refresh(); minimal glue only.
+# Control references shared between builders and _refresh(); single session only
+# (desktop or one web client) — multi-client web sharing would need keying by page.id.
 _state: dict = {}
 
 
@@ -45,13 +46,16 @@ def _on_key(controller, page, e):
     k = e.key.lower()
     if k in "123456789":
         try:
-            c.categorize(int(k))
+            c.categorize(int(k) - 1)  # keys are 1-based chips, categorize is 0-based
         except Exception as exc:                      # noqa: BLE001 - surfaced by snack bar
             _snack(page, f"Error: {exc}")
     elif k == "s":
         c.skip()
     elif k == "u":
-        c.undo()
+        try:
+            c.undo()
+        except Exception as exc:                      # noqa: BLE001 - surfaced by snack bar
+            _snack(page, f"Error: {exc}")
     elif k == "r":
         _rotator()
     elif k == "i":
@@ -186,7 +190,7 @@ def build_chip_bar(controller, page):
             if not ok:
                 _snack(page, f"Error: {msg}")
                 return
-            page.pop_dialog(dlg)
+            page.pop_dialog()
             _rebuild_chips(controller, page)
             _refresh(page, controller)
 
@@ -194,7 +198,7 @@ def build_chip_bar(controller, page):
             title=ft.Text("Add category"),
             content=field,
             actions=[
-                ft.TextButton("Cancel", on_click=lambda _e: page.pop_dialog(dlg)),
+                ft.TextButton("Cancel", on_click=lambda _e: page.pop_dialog()),
                 ft.TextButton("Add", on_click=_confirm),
             ],
         )
@@ -207,7 +211,7 @@ def build_chip_bar(controller, page):
 def build_action_bar(controller, page):
     def _set_mode(_e):
         controller.settings["mode"] = "copy" if mode_switch.value else "move"
-        mode_switch.label = f"copy ({controller.settings['mode']})"
+        mode_switch.label = f"mode: {controller.settings['mode']}"
         settings_mod.save_settings(controller.settings)
         page.update()
 
@@ -232,7 +236,7 @@ def build_action_bar(controller, page):
         _refresh(page, controller)
 
     mode_switch = ft.Switch(
-        label=f"copy ({controller.settings.get('mode', 'move')})",
+        label=f"mode: {controller.settings.get('mode', 'move')}",
         value=controller.settings.get("mode") == "copy",
         on_change=_set_mode,
     )
