@@ -81,7 +81,7 @@ def test_undo_copied_file_is_removed(tmp_path):
 
 
 def test_undo_empty_returns_none(tmp_path):
-    src, m = _workspace(tmp_path)
+    _src, m = _workspace(tmp_path)
     assert Categorizer(m).undo() is None
 
 

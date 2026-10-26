@@ -21,5 +21,5 @@ def describe(path: str) -> str:
                 if value:
                     lines.append(f"{label}: {value}")
             return "\n".join(lines)
-    except Exception:
+    except Exception:  # noqa: BLE001 — spec: describe() never raises
         return f"File: {name}\n(unreadable)"

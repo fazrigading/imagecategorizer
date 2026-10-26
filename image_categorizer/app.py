@@ -1,5 +1,5 @@
 import os
-from tkinter import Tk, messagebox, filedialog, Button, Label, Frame, simpledialog
+from tkinter import Button, Frame, Label, Tk, filedialog, messagebox, simpledialog
 
 from PIL import Image, ImageTk
 
@@ -195,14 +195,7 @@ class ImageCategorizerApp:
             return
         name = name.strip()
         invalid = (
-            not name
-            or "/" in name
-            or name.startswith(".")
-            or name in self.model.categories
-            or any(c in name for c in '<>:"\\|?*')
-            or any(ord(c) < 32 for c in name)
-            or name.endswith(" ")
-            or name.endswith(".")
+            not name or "/" in name or name.startswith(".") or name in self.model.categories or any(c in name for c in '<>:"\\|?*') or any(ord(c) < 32 for c in name) or name.endswith((" ", "."))
         )
         if invalid:
             messagebox.showerror("Invalid", f"'{name}' is not an acceptable category name.")

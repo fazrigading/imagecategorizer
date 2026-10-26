@@ -73,9 +73,8 @@ class Categorizer:
         action = self.undo_log.pop()
         if action.op == "move":
             os.replace(str(action.dst), str(action.src))
-        elif action.op == "copy":
-            if os.path.exists(str(action.dst)):
-                os.remove(str(action.dst))
+        elif action.op == "copy" and os.path.exists(str(action.dst)):
+            os.remove(str(action.dst))
         self.model.cursor = action.cursor_before
         if action.dst is not None:
             self.model.processed.discard(str(action.dst))
