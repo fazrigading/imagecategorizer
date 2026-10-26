@@ -51,6 +51,8 @@ class ImageCategorizerApp:
         if self.viewer is None:
             self.image_label = Label(self.root)
             self.image_label.pack(expand=True, fill="both")
+        else:
+            self.viewer.pack(expand=True, fill="both")
 
         self.image_status = Label(self.root, text="Select a directory")
         self.image_status.pack(side="bottom")
