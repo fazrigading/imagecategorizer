@@ -6,6 +6,6 @@ def test_package_exports_version():
 
 
 def test_app_module_exposes_main():
-    from image_categorizer.app import main
+    from image_categorizer.__main__ import main
 
     assert callable(main)

@@ -71,6 +71,10 @@ class Controller:
             tail = [p for p in tail if f in os.path.basename(p).lower()]
         return tail[:limit]
 
+    def jump_to(self, path: str) -> None:
+        if path in self.model.images:
+            self.model.cursor = self.model.images.index(path)
+
     def describe_current(self):
         path = self.model.current()
         return metadata.describe(path) if path else None

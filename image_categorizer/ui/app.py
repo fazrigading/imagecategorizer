@@ -1,4 +1,7 @@
+import io
+
 import flet as ft
+from PIL import Image
 
 from image_categorizer import settings as settings_mod
 from image_categorizer.controller import Controller
@@ -57,11 +60,13 @@ def _on_key(controller, page, e):
         except Exception as exc:                      # noqa: BLE001 - surfaced by snack bar
             _snack(page, f"Error: {exc}")
     elif k == "r":
-        _rotator()
+        imagearea.rotate_current()
     elif k == "i":
         c.meta_shown = not c.meta_shown
     elif k == "f":
-        pass  # filter focus is appended in Task 6 when filter control exists
+        filter_field = _state.get("filter")
+        if filter_field is not None:
+            filter_field.focus()
     _refresh(page, controller)
 
 
@@ -70,17 +75,16 @@ def _snack(page, text):
     page.update()
 
 
-def _rotator():
-    from image_categorizer.ui import imagearea
-    imagearea.rotate_current()
-
-
 def _refresh(page, controller):
+    imagearea.refresh(controller)
     _state["counter"].value = (
         f"{controller.processed_count()}/{len(controller.model.images)}"
     )
     _state["undo"].disabled = not controller.can_undo()
     _state["dir_text"].value = _dir_label(controller, page)
+    _state["meta_strip"].visible = controller.meta_shown
+    _state["meta_text"].value = controller.describe_current()
+    _state["thumb_row"].controls = _thumb_controls(controller, page)
     page.update()
 
 
@@ -265,8 +269,55 @@ def build_action_bar(controller, page):
 
 
 def build_thumb_strip(controller, page):
-    return ft.Row()
+    row = ft.Row(scroll=ft.ScrollMode.AUTO, spacing=8)
+    row.controls = _thumb_controls(controller, page)
+    _state["thumb_row"] = row
+    return row
+
+
+def _thumb_controls(controller, page):
+    current = controller.current_image()
+    controls = []
+    for path in controller.thumbnails(12):
+        selected = path == current
+        controls.append(
+            ft.Container(
+                content=ft.Image(
+                    src=_thumb_bytes(path),
+                    fit=ft.BoxFit.SCALE_DOWN,
+                    border_radius=6,
+                ),
+                width=90,
+                height=90,
+                border=ft.BorderSide(2, ft.Colors.PRIMARY) if selected else None,
+                on_click=lambda e, p=path: _thumb_jump(controller, page, p),
+            )
+        )
+    return controls
+
+
+def _thumb_jump(controller, page, path):
+    controller.jump_to(path)
+    _refresh(page, controller)
+
+
+def _thumb_bytes(path):
+    buf = io.BytesIO()
+    try:
+        with Image.open(path) as img:
+            img.thumbnail((90, 90))
+            img.save(buf, format="PNG")
+    except Exception:  # noqa: BLE001 — display-safe: drop thumbnail, keep app running
+        return None
+    return buf.getvalue()
 
 
 def build_meta_strip(controller, page):
-    return ft.Container(height=0)
+    text = ft.Text(
+        controller.describe_current(),
+        selectable=True,
+    )
+    strip = ft.Container(content=text, visible=controller.meta_shown)
+    _state["meta_text"] = text
+    _state["meta_strip"] = strip
+    return strip

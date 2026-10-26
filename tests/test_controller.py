@@ -89,6 +89,30 @@ def test_filter_via_thumbnails(tmp_path, monkeypatch):
     assert c.thumbnails() == [str(src / "img_1.jpg")]
 
 
+def test_jump_to_moves_cursor(tmp_path, monkeypatch):
+    src = _seed(tmp_path, 3)
+    c = _controller(tmp_path, monkeypatch)
+    c.open_directory(str(src))
+    c.jump_to(str(src / "img_2.jpg"))
+    assert c.current_image() == str(src / "img_2.jpg")
+
+
+def test_jump_to_unknown_path_is_noop(tmp_path, monkeypatch):
+    src = _seed(tmp_path, 3)
+    c = _controller(tmp_path, monkeypatch)
+    c.open_directory(str(src))
+    c.jump_to(str(src / "nope.jpg"))
+    assert c.current_image() == str(src / "img_0.jpg")
+
+
+def test_describe_current_returns_metadata_text(tmp_path, monkeypatch):
+    src = _seed(tmp_path, 1)
+    c = _controller(tmp_path, monkeypatch)
+    c.open_directory(str(src))
+    text = c.describe_current()
+    assert text.endswith("10x10") or (text.startswith("File: img_0.jpg") and "Dimensions: 10x10" in text)
+
+
 def test_open_empty_dir_raises_after_last_dir_save(tmp_path, monkeypatch):
     empty = tmp_path / "empty"
     empty.mkdir()
