@@ -4,8 +4,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   build-wheels:
@@ -44,8 +43,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install -e . pyinstaller
-      - run: pyinstaller --onefile --windowed --name imagecategorizer run.py
+      - run: pip install .
+      - run: flet pack -n imagecategorizer main.py
+        # `-n` documented for Windows exe; fallback rename guards naming drift
+        # until first tag proves the output name.
+      - name: Rename output
+        shell: bash
+        run: |
+          [ -f dist/imagecategorizer.exe ] || cp "$(find dist -maxdepth 1 -type f | head -1)" dist/imagecategorizer.exe
       - uses: actions/upload-artifact@v4
         with:
           name: exe
@@ -58,18 +63,27 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install -e . pyinstaller
-      - run: pyinstaller --onefile --name imagecategorizer run.py
+      - run: pip install .
+      - run: flet pack -n imagecategorizer main.py
       - name: Build AppImage
         run: |
           APPDIR=imagecategorizer.AppDir
           mkdir -p "$APPDIR/usr/bin"
+          if [ ! -f dist/imagecategorizer ]; then
+            first=$(find dist -maxdepth 1 -type f ! -name "*.exe" | head -1)
+            cp "$first" dist/imagecategorizer
+          fi
           cp dist/imagecategorizer "$APPDIR/usr/bin/"
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          exec "$(dirname "$(readlink -f "$0")")/usr/bin/imagecategorizer" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
           cat > "$APPDIR/imagecategorizer.desktop" <<'EOF'
           [Desktop Entry]
           Type=Application
           Name=Image Categorizer
-          Exec=imagecategorizer
+          Exec=usr/bin/imagecategorizer
           Icon=imagecategorizer
           Categories=Graphics;
           EOF

@@ -2,7 +2,8 @@
 
 Fast single-image triage for classification datasets: open a folder,
 categorize one photo at a time with the keyboard, files land in
-per-category subfolders.
+per-category subfolders. Built on [Flet](https://flet.dev) — the same app
+runs as a desktop window or in a web browser.
 
 ## Install
 
@@ -10,39 +11,87 @@ per-category subfolders.
 pip install imagecategorizer
 ```
 
-No Python needed? Download the Windows `.exe` or Linux `.AppImage` from the
+No Python needed? Grab the Windows `.exe` or Linux `.AppImage` from the
 [Releases](https://github.com/fazrigading/imagecategorizer/releases) page.
 
-## Usage
+## Run
 
-Run `imagecategorizer` (or double-click the binary), click **Select
-Directory**, then work the keyboard:
+Desktop:
 
-- **1–9** — assign the current image to category N (buttons in the toolbar do the same)
-- **o / p** — legacy aliases for categories 1 and 2
-- **s** — skip (leave in place, move on)
-- **u** — undo last action (move reverts; copy deletes the copy)
-- **i** — toggle the info panel (format, dimensions, size, EXIF make/model/date)
-- **r** — rotate the display 90° clockwise (display only)
+```bash
+imagecategorizer
+```
 
-The **Mode** button toggles copy vs move; the choice persists between runs.
-"+ Add category" creates a new destination folder and button instantly.
+Web:
 
-## Persistence
+```bash
+imagecategorizer --web
+```
 
-Progress (cursor position, processed list) is saved as
-`.imagecategorizer-state.json` inside the source folder, so closing and
-reopening — even on another machine via sync — resumes where you stopped.
-App-wide preferences live in `~/.imagecategorizer/settings.json`.
+(From a source checkout, `main.py` works the same way, as does `flet run`
+/ `flet run --web`.)
 
-### Settings file
+Then pick a directory with the folder button and work the keyboard.
 
-Power users can hand-edit `~/.imagecategorizer/settings.json`. Currently
-the only key without a UI is `rename_pattern`: a Python format string
-applied when organizing (renaming) files into categories. Example:
-`"rename_pattern": "{category}_{idx:04d}{ext}"` turns `photo.jpg` into
-`infected_0001.jpg` when assigned to the `infected` category. Valid
-fields: `category`, `idx`, `ext`.
+## Keyboard
+
+| Key | Action |
+|-----|--------|
+| **1–9** | Assign the current image to category N |
+| **s** | Skip (leave in place, move on) |
+| **u** | Undo the last action (a move reverts; a copied copy is deleted) |
+| **r** | Rotate the display 90° clockwise (display only) |
+| **i** | Toggle the metadata strip (name, format, dimensions, size, EXIF) |
+| **f** | Focus the filter field (type to narrow the thumbnail strip by filename) |
+
+Known quirk: while the filter field (or a text input) has keyboard focus,
+the single-letter and digit shortcuts above still fire on the page — flet
+1.0.5 gives the app no way to detect which control is focused. Click
+outside to blur the field before using the shortcuts.
+
+On-screen equivalents exist for everything: category buttons (1–9), Skip
+and Undo buttons, the filter field, the metadata strip toggle is implicit
+in the strip, and clicking a thumbnail in the strip jumps to that image
+(chevron buttons scroll the strip back/forward).
+
+File / Edit / View / Help buttons (dropdown menus) sit top-left: open a directory,
+exit, edit categories, switch the middle-top counter between simple
+(x/y), per-category counts, or both, toggle metadata, and About.
+
+The **mode** switch toggles copy vs move and **subfolders** switch
+includes subdirectories on the next directory open; both persist.
+"+ Add category" creates the destination folder on disk and its button
+instantly. "Edit categories..." renames or deletes chips via the Edit
+menu — folders and already-categorized files on disk are never touched.
+
+## Storage
+
+- App-wide preferences: `~/.imagecategorizer/settings.json`
+  - Keys: `categories`, `mode`, `subfolders`, `theme`, `last_dir`,
+    `rename_pattern`
+- Per-directory session progress: `.imagecategorizer-state.json` inside
+  the source folder (cursor position + processed list), so closing and
+  reopening — even on another machine via sync — resumes where you
+  stopped.
+
+`rename_pattern` is power-user only (no UI): a Python format string
+applied when organizing files into categories, e.g.
+`"{category}_{idx:04d}{ext}"` turns `photo.jpg` into `infected_0001.jpg`.
+Valid fields: `category`, `idx`, `ext`.
+
+## Web mode caveat
+
+In web mode, file and directory access resolve on the machine serving
+the app, not the browser's machine — and the directory picker is
+disabled (open the app with a directory already in play on that server,
+or run desktop mode to pick one). Also note one-client-at-a-time: the
+current build is not safe to share across concurrent browser clients.
+
+## Packaging
+
+Builds ship as portable binaries (`.exe` for Windows, `.AppImage` for
+Linux) plus the standard PyPI installation; CI produces these on tagged
+releases.
 
 ## Development
 

@@ -6,12 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "imagecategorizer"
 description = "Fast single-image triage for classification datasets"
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = ["Pillow>=10"]
+requires-python = ">=3.10"
+dependencies = ["flet>=1.0", "Pillow>=10"]
 dynamic = ["version"]
 
 [project.scripts]
-imagecategorizer = "image_categorizer.app:main"
+imagecategorizer = "image_categorizer.__main__:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "image_categorizer.__version__" }
