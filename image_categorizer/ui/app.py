@@ -5,6 +5,7 @@ import os
 import flet as ft
 from PIL import Image
 
+from image_categorizer import __version__
 from image_categorizer import settings as settings_mod
 from image_categorizer.controller import Controller
 from image_categorizer.ui import imagearea
@@ -18,6 +19,7 @@ def main_page(page: ft.Page):
     page.title = "Gading's Image Categorizer"
     cfg = settings_mod.load_settings()
     controller = Controller(cfg)
+    controller.counter_mode = "simple"
     page.theme_mode = _theme_mode(cfg.get("theme", "system"))
     _state.clear()
     _state["controller"] = controller
@@ -25,13 +27,12 @@ def main_page(page: ft.Page):
 
     page.on_keyboard_event = lambda e: _on_key(controller, page, e)
 
-    # -- app bar
+    # -- app bar: menu (left), counter (center), directory + theme (right)
     page.appbar = build_app_bar(controller, page)
 
     page.add(
-        build_chip_bar(controller, page),
+        build_top_bar(controller, page),
         imagearea.build_image_area(controller),
-        build_action_bar(controller, page),
         build_thumb_strip(controller, page),
         build_meta_strip(controller, page),
     )
@@ -88,13 +89,33 @@ def _snack(page, text):
     page.update()
 
 
+def _counter_text(controller):
+    """Middle-top counter; View menu selects simple / per-category / both."""
+    processed = controller.processed_count()
+    total = len(controller.model.images)
+    if not controller.source_dir:
+        return "0/0"
+    mode = getattr(controller, "counter_mode", "simple")
+    if mode == "simple":
+        return f"{processed}/{total}"
+    counts, skipped = controller.count_categories()
+    cats = " · ".join(f"{n}: {counts.get(n, 0)}" for n in controller.categories())
+    line = f"{cats} · skip: {skipped}"
+    if mode == "both":
+        return f"{processed}/{total} — {line}"
+    return line
+
+
 def _refresh(page, controller):
     imagearea.refresh(controller)
-    _state["counter"].value = (
-        f"{controller.processed_count()}/{len(controller.model.images)}"
-    )
+    counter = _state.get("counter")
+    if counter is not None:
+        counter.value = _counter_text(controller)
     _state["undo"].disabled = not controller.can_undo()
     _state["dir_text"].value = _dir_label(controller, page)
+    web_field = _state.get("web_dir_field")
+    if web_field is not None:
+        web_field.value = controller.source_dir or web_field.value
     _state["meta_strip"].visible = controller.meta_shown
     _state["meta_text"].value = controller.describe_current() or ""
     _state["thumb_row"].controls = _thumb_controls(controller, page)
@@ -108,11 +129,14 @@ def _dir_label(controller, page):
 
 
 def _ensure_file_picker(page):
+    # FilePicker is a Service in flet 1.x — it attaches to page.services,
+    # NOT page.overlay (overlay would raise "Unknown control" at raise time).
     picker = _state.get("file_picker")
     if picker is None:
         picker = ft.FilePicker()
         _state["file_picker"] = picker
-        page.overlay.append(picker)
+        page.services.append(picker)
+        page.update()
     return picker
 
 
@@ -126,13 +150,8 @@ def _handle_open_dir(controller, page, path):
     _refresh(page, controller)
 
 
-def build_app_bar(controller, page):
-    counter = ft.Text(f"{controller.processed_count()}/{len(controller.model.images)}")
-    dir_text = ft.Text(_dir_label(controller, page))
-    _state["counter"] = counter
-    _state["dir_text"] = dir_text
-
-    async def _pick_dir(_e):
+def _pick_dir_and_refresh(controller, page):
+    async def _handler(_e):
         path = await _ensure_file_picker(page).get_directory_path(
             initial_directory=(
                 controller.source_dir or controller.settings.get("last_dir") or None
@@ -141,15 +160,19 @@ def build_app_bar(controller, page):
         if path:
             _handle_open_dir(controller, page, path)
 
-    def _toggle_theme(_e):
-        controller.settings["theme"] = (
-            "light" if controller.settings.get("theme") == "dark" else "dark"
-        )
-        settings_mod.save_settings(controller.settings)
-        page.theme_mode = _theme_mode(controller.settings["theme"])
-        page.update()
+    return _handler
 
-    actions = [counter, dir_text]
+
+# -- top area: menu bar in the app bar; chips + actions below it ------------
+
+
+def build_app_bar(controller, page):
+    counter = ft.Text(_counter_text(controller), size=16, weight=ft.FontWeight.BOLD)
+    dir_text = ft.Text(_dir_label(controller, page))
+    _state["counter"] = counter
+    _state["dir_text"] = dir_text
+
+    actions = [dir_text]
     if page.web:
         # Web: paths resolve on the serving machine, so offer a text input
         field = ft.TextField(
@@ -168,23 +191,153 @@ def build_app_bar(controller, page):
             ft.IconButton(
                 icon=ft.Icons.FOLDER_OPEN,
                 tooltip="Open directory",
-                on_click=_pick_dir,
+                on_click=_pick_dir_and_refresh(controller, page),
             )
         )
-    actions.append(
-        ft.IconButton(
-            icon=ft.Icons.DARK_MODE,
-            tooltip="Toggle dark/light theme",
-            on_click=_toggle_theme,
+    actions.append(_theme_button(controller, page))
+    return ft.AppBar(leading=build_menu_bar(controller, page), title=counter,
+                     center_title=True, actions=actions)
+
+
+def _theme_button(controller, page):
+    async def _toggle_theme(_e):
+        controller.settings["theme"] = (
+            "light" if controller.settings.get("theme") == "dark" else "dark"
         )
+        settings_mod.save_settings(controller.settings)
+        page.theme_mode = _theme_mode(controller.settings["theme"])
+        page.update()
+
+    return ft.IconButton(
+        icon=ft.Icons.DARK_MODE,
+        tooltip="Toggle dark/light theme",
+        on_click=_toggle_theme,
     )
-    return ft.AppBar(title=ft.Text("Gading's Image Categorizer"), actions=actions)
+
+
+def _open_dir_menu_item(controller, page):
+    label = "Open Directory..."
+    if not page.web:
+        return ft.MenuItemButton(
+            content=ft.Text(label),
+            on_click=_pick_dir_and_refresh(controller, page),
+        )
+    # Web cannot raise a native picker; nudge to the field in the app bar
+    return ft.MenuItemButton(content=ft.Text(label), on_click=lambda _e: None)
+
+
+def _exit_menu_item(page):
+    async def _exit(_e):
+        if not page.web and getattr(page, "window", None) is not None:
+            try:
+                await page.window.close()
+            except RuntimeError:
+                pass  # window may be unavailable in embedded/themeless runs
+
+    return ft.MenuItemButton(content=ft.Text("Exit"), on_click=_exit)
+
+
+def _counter_mode_items(controller, page):
+    items = []
+    for mode, label in (
+        ("simple", "Counter: simple (x/y)"),
+        ("extended", "Counter: per-category"),
+        ("both", "Counter: both"),
+    ):
+        active = getattr(controller, "counter_mode", "simple") == mode
+
+        def _set(_e, m=mode):
+            controller.counter_mode = m
+            counter = _state.get("counter")
+            if counter is not None:
+                counter.value = _counter_text(controller)
+            page.appbar = build_app_bar(controller, page)  # re-check the menu tick
+            page.update()
+
+        items.append(
+            ft.MenuItemButton(
+                content=ft.Text(label),
+                leading=ft.Icon(ft.Icons.CHECK if active else ft.Icons.CHECK_BOX_OUTLINE_BLANK),
+                on_click=_set,
+            )
+        )
+    return items
+
+
+def build_menu_bar(controller, page):
+    def _meta_item():
+        def _toggle(_e):
+            controller.meta_shown = not controller.meta_shown
+            _refresh(page, controller)
+
+        return ft.MenuItemButton(
+            content=ft.Text("Show metadata"),
+            leading=ft.Icon(ft.Icons.INFO),
+            on_click=_toggle,
+        )
+
+    def _edit_categories():
+        def _open(_e):
+            page.show_dialog(_edit_categories_dialog(controller, page))
+
+        return ft.MenuItemButton(
+            content=ft.Text("Edit categories..."),
+            leading=ft.Icon(ft.Icons.EDIT),
+            on_click=_open,
+        )
+
+    def _about():
+        def _open(_e):
+            page.show_dialog(
+                ft.AlertDialog(
+                    title=ft.Text("Image Categorizer"),
+                    content=ft.Text(
+                        f"Gading's Image Categorizer v{__version__}\n\n"
+                        "Keyboard triage for image datasets, built with Flet.\n"
+                        "Help: see the keybinds listed in the project README."
+                    ),
+                    actions=[ft.TextButton("Close", on_click=lambda _e: page.pop_dialog())],
+                )
+            )
+
+        return ft.MenuItemButton(
+            content=ft.Text("About..."),
+            leading=ft.Icon(ft.Icons.HELP),
+            on_click=_open,
+        )
+
+    return ft.MenuBar(
+        controls=[
+            ft.SubmenuButton(
+                content=ft.Text("File"),
+                controls=[
+                    _open_dir_menu_item(controller, page),
+                    _exit_menu_item(page),
+                ],
+            ),
+            ft.SubmenuButton(
+                content=ft.Text("Edit"),
+                controls=[_edit_categories()],
+            ),
+            ft.SubmenuButton(
+                content=ft.Text("View"),
+                controls=[
+                    *_counter_mode_items(controller, page),
+                    _meta_item(),
+                    _theme_button(controller, page),
+                ],
+            ),
+            ft.SubmenuButton(
+                content=ft.Text("Help"),
+                controls=[_about()],
+            ),
+        ]
+    )
 
 
 def _chip_controls(controller, page):
     controls = []
     for i, name in enumerate(controller.categories()):
-
         def _cat(_e, idx=i):
             try:
                 controller.categorize(idx)
@@ -205,10 +358,12 @@ def _chip_controls(controller, page):
 def _rebuild_chips(controller, page):
     row = _state["chip_row"]
     row.controls = _chip_controls(controller, page)
+    if controller.source_dir:  # counts may have shifted on an edit
+        _refresh(page, controller)
 
 
 def build_chip_bar(controller, page):
-    row = ft.Row(spacing=8, wrap=True)
+    row = ft.Row(spacing=8, wrap=True, run_spacing=8, scroll=ft.ScrollMode.AUTO)
     row.controls = _chip_controls(controller, page)
     _state["chip_row"] = row
 
@@ -236,6 +391,65 @@ def build_chip_bar(controller, page):
 
     row.controls.append(ft.FilledButton("+ Add category", on_click=_add_cat))
     return row
+
+
+def _edit_categories_dialog(controller, page):
+    rows = []
+
+    def _apply(_e):
+        original = list(controller.categories())
+        used = set()
+        for entry, orig in rows:
+            new = (entry.value or "").strip()
+            if new == orig:
+                used.add(orig)
+                continue
+            if new:
+                ok, msg = controller.rename_category(orig, new)
+                if not ok:
+                    _snack(page, f"Error: {msg}")
+                    return
+                used.add(new)
+        # entries blanked by the user are deletions
+        for orig in original:
+            if orig not in used:
+                ok, msg = controller.remove_category(orig)
+                if not ok:
+                    _snack(page, f"Error: {msg}")
+                    return
+        page.pop_dialog()
+        _rebuild_chips(controller, page)
+        _refresh(page, controller)
+
+    for name in controller.categories():
+        entry = ft.TextField(value=name, expand=True)
+        rows.append((entry, name))
+
+    def _remove(entry, orig):
+        async def _del(_e):
+            entry.value = ""
+            entry.update()
+        return _del
+
+    content = ft.Column(
+        [
+            ft.Row([entry, ft.IconButton(ft.Icons.DELETE, on_click=_remove(entry, orig))])
+            for entry, orig in rows
+        ],
+        tight=True, scroll=ft.ScrollMode.AUTO,
+    )
+
+    return ft.AlertDialog(
+        title=ft.Text("Edit categories"),
+        content=content,
+        actions=[
+            ft.TextButton("Cancel", on_click=lambda _e: page.pop_dialog()),
+            ft.TextButton("Save", on_click=_apply),
+        ],
+    )
+
+
+# -- action controls live top-right, under the directory, next to chips ----
 
 
 def build_action_bar(controller, page):
@@ -284,21 +498,54 @@ def build_action_bar(controller, page):
         label="Filter",
         value=controller.filter_text,
         on_change=_set_filter,
+        width=160,
     )
-
     _state["undo"] = undo
     _state["filter"] = filter_field
+    return [
+        mode_switch,
+        sub_switch,
+        undo,
+        ft.FilledButton("Skip (s)", on_click=_skip),
+        filter_field,
+    ]
+
+
+def build_top_bar(controller, page):
+    """Chips (left) + mode/subfolders/undo/skip/filter (right), in one top row."""
     return ft.Row(
-        [mode_switch, sub_switch, undo, ft.FilledButton("Skip (s)", on_click=_skip), filter_field],
-        spacing=12,
+        [
+            build_chip_bar(controller, page),
+            ft.Row(build_action_bar(controller, page), spacing=12, wrap=True),
+        ],
+        spacing=16,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
+
+
+# -- thumbnail strip: prev / next buttons scroll the row --------------------
 
 
 def build_thumb_strip(controller, page):
-    row = ft.Row(scroll=ft.ScrollMode.AUTO, spacing=8)
+    async def _scroll(_e, delta):
+        row = _state["thumb_row"]
+        if row.controls:
+            await row.scroll_to(delta=delta, duration=200)
+
+    row = ft.Row(scroll=ft.ScrollMode.AUTO, spacing=8, expand=True)
     row.controls = _thumb_controls(controller, page)
     _state["thumb_row"] = row
-    return row
+    return ft.Row(
+        [
+            ft.IconButton(ft.Icons.CHEVRON_LEFT, on_click=lambda e: _scroll(e, -360),
+                          tooltip="Scroll strip back"),
+            row,
+            ft.IconButton(ft.Icons.CHEVRON_RIGHT, on_click=lambda e: _scroll(e, 360),
+                          tooltip="Scroll strip forward"),
+        ],
+        spacing=4,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
 
 def _thumb_controls(controller, page):

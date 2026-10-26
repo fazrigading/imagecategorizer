@@ -89,6 +89,47 @@ def test_filter_via_thumbnails(tmp_path, monkeypatch):
     assert c.thumbnails() == [str(src / "img_1.jpg")]
 
 
+def test_rename_and_remove_category(tmp_path, monkeypatch):
+    c = _controller(tmp_path, monkeypatch)
+    c.add_category("first")
+    ok, _ = c.rename_category("first", "renamed")
+    assert ok is True
+    assert c.categories() == ["infected", "normal", "renamed"]
+    assert settings.load_settings()["categories"] == c.categories()
+    ok, _ = c.remove_category("renamed")
+    assert ok is True
+    assert "renamed" not in c.categories()
+    # rename onto duplicate / invalid names is rejected
+    ok, msg = c.rename_category("infected", "NORMAL")
+    assert ok is False and "duplicate" in msg.lower()
+    ok, msg = c.rename_category("normal", "a<b")
+    assert ok is False and "invalid" in msg.lower()
+    ok, msg = c.rename_category("ghost", "anything")
+    assert ok is False
+
+
+def test_remove_unknown_and_empty_names(tmp_path, monkeypatch):
+    c = _controller(tmp_path, monkeypatch)
+    ok, msg = c.remove_category("ghost")
+    assert ok is False and msg
+    c.add_category("a")
+    ok, _ = c.rename_category("a", "a")  # rename to self allowed
+    assert ok is True
+
+
+def test_counts_by_category(tmp_path, monkeypatch):
+    src = _seed(tmp_path, 5)
+    c = _controller(tmp_path, monkeypatch)
+    c.open_directory(str(src))
+    c.categorize(0)  # infected
+    c.categorize(0)
+    c.skip()
+    counts, skipped = c.count_categories()
+    assert counts == {"infected": 2}
+    assert skipped == 1
+    assert c.processed_count() == 2
+
+
 def test_jump_to_moves_cursor(tmp_path, monkeypatch):
     src = _seed(tmp_path, 3)
     c = _controller(tmp_path, monkeypatch)

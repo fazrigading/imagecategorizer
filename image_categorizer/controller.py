@@ -120,6 +120,14 @@ class Controller:
     # -- categories ---------------------------------------------------------
 
     def add_category(self, name: str) -> tuple[bool, str]:
+        ok, msg = self._validate_category_name(name)
+        if not ok:
+            return ok, msg
+        if name.lower() in (c.lower() for c in self.model.categories):
+            return False, f"Category {name!r} already exists (duplicate)"
+        return self._commit_category(name)
+
+    def _validate_category_name(self, name: str, ignore: str = "") -> tuple[bool, str]:
         if not name:
             return False, "Category name is empty"
         for ch in '<>:"/\\|?*':
@@ -131,8 +139,13 @@ class Controller:
             return False, "Category name cannot start with a dot"
         if name.endswith((" ", ".")):
             return False, "Category name cannot end with a space or dot"
-        if name.lower() in (c.lower() for c in self.model.categories):
+        if name.lower() in (
+            c.lower() for c in self.model.categories if c.lower() != ignore.lower()
+        ):
             return False, f"Category {name!r} already exists (duplicate)"
+        return True, ""
+
+    def _commit_category(self, name: str) -> tuple[bool, str]:
         if self.source_dir:
             try:
                 os.makedirs(os.path.join(self.source_dir, name), exist_ok=True)
@@ -142,6 +155,50 @@ class Controller:
         self.settings["categories"] = list(self.model.categories)
         settings_mod.save_settings(self.settings)
         return True, ""
+
+    def rename_category(self, old: str, new: str) -> tuple[bool, str]:
+        # Only re-labels future categorizations; files already in the old
+        # folder stay where they are.
+        if not self._find(old):
+            return False, f"Category {old!r} does not exist"
+        ok, msg = self._validate_category_name(new, ignore=old)
+        if not ok:
+            return ok, msg
+        if self.source_dir and old != new:
+            try:
+                os.makedirs(os.path.join(self.source_dir, new), exist_ok=True)
+            except OSError as e:
+                return False, f"Could not create category folder: {e}"
+        self.model.categories[self.model.categories.index(old)] = new
+        self.settings["categories"] = list(self.model.categories)
+        settings_mod.save_settings(self.settings)
+        return True, ""
+
+    def remove_category(self, name: str) -> tuple[bool, str]:
+        if not self._find(name):
+            return False, f"Category {name!r} does not exist"
+        # Category folder on disk is left untouched (files are never deleted).
+        self.model.categories.remove(name)
+        self.settings["categories"] = list(self.model.categories)
+        settings_mod.save_settings(self.settings)
+        return True, ""
+
+    def _find(self, name: str) -> str | None:
+        for c in self.model.categories:
+            if c.lower() == name.lower():
+                return c
+        return None
+
+    def count_categories(self) -> tuple[dict[str, int], int]:
+        """(categorized per category, skipped) — dest paths are
+        `<source_dir>/<category>/<file>`; skipped images never enter `processed`."""
+        counts: dict[str, int] = {}
+        if self.source_dir:
+            for dst in self.model.processed:
+                first = os.path.relpath(dst, self.source_dir).split(os.sep)[0]
+                counts[first] = counts.get(first, 0) + 1
+        skipped = max(0, self.model.cursor - len(self.model.processed))
+        return counts, skipped
 
     def categories(self) -> list[str]:
         return list(self.model.categories)
