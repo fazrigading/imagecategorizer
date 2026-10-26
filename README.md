@@ -54,7 +54,7 @@ and Undo buttons, the filter field, the metadata strip toggle is implicit
 in the strip, and clicking a thumbnail in the strip jumps to that image
 (chevron buttons scroll the strip back/forward).
 
-A menu bar (File / Edit / View / Help) sits top-left: open a directory,
+File / Edit / View / Help buttons (dropdown menus) sit top-left: open a directory,
 exit, edit categories, switch the middle-top counter between simple
 (x/y), per-category counts, or both, toggle metadata, and About.
 
