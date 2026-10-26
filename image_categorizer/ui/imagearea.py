@@ -54,6 +54,9 @@ def refresh(controller):
 
 
 def rotate_current():
+    # Spec: rotate resets zoom and re-fits
+    _state["scale"] = 1.0
+    _state["off"] = (0.0, 0.0)
     _state["rot"] = (_state["rot"] + 90) % 360
     _apply()
 
