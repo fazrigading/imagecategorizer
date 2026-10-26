@@ -46,6 +46,11 @@ def _theme_mode(s: str):
 
 
 def _on_key(controller, page, e):
+    # Limitation (flet 1.0.5): page-level keyboard events fire even while the
+    # Filter TextField or a dialog input has focus, and neither Page nor
+    # KeyboardEvent exposes which control is focused — so 1-9/s/u/i keys also
+    # fire while typing in those fields. Mitigated by the Esc-route (blur the
+    # field first); revisit if a focused-control API lands in flet.
     c = controller
     k = e.key.lower()
     if k in "123456789":

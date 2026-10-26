@@ -44,6 +44,11 @@ Then pick a directory with the folder button and work the keyboard.
 | **i** | Toggle the metadata strip (name, format, dimensions, size, EXIF) |
 | **f** | Focus the filter field (type to narrow the thumbnail strip by filename) |
 
+Known quirk: while the filter field (or a text input) has keyboard focus,
+the single-letter and digit shortcuts above still fire on the page — flet
+1.0.5 gives the app no way to detect which control is focused. Click
+outside (or press Escape) to blur the field before using the shortcuts.
+
 On-screen equivalents exist for everything: category buttons (1–9), Skip
 and Undo buttons, the filter field, the metadata strip toggle is implicit
 in the strip, and clicking a thumbnail in the strip jumps to that image.
