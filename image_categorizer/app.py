@@ -32,6 +32,12 @@ class ImageCategorizerApp:
         self.select_button.pack(side="left")
         self.mode_button = Button(self.top_bar, text="Mode: Move (click to toggle)", command=self.toggle_mode)
         self.mode_button.pack(side="left", padx=5)
+        self.subfolders_button = Button(
+            self.top_bar,
+            text=f"Subfolders: {'On' if self.settings['use_subfolders'] else 'Off'}",
+            command=self.toggle_subfolders,
+        )
+        self.subfolders_button.pack(side="left")
         self.undo_button = Button(self.top_bar, text="Undo (u)", state="disabled", command=self.undo)
         self.undo_button.pack(side="left")
 
@@ -107,8 +113,8 @@ class ImageCategorizerApp:
             return
         try:
             self.categorizer.handle(category, self.source_dir)
-        except OSError as e:
-            messagebox.showerror(WINDOW_TITLE, f"Error moving image: {e}")
+        except (OSError, KeyError, IndexError, ValueError) as e:
+            self.image_status["text"] = f"Error: {e}"
             return
         self._refresh_status()
         self.display_image()
@@ -137,6 +143,11 @@ class ImageCategorizerApp:
         self.model.mode = "copy" if self.model.mode == "move" else "move"
         self.mode_button.config(text=f"Mode: {self.model.mode.capitalize()} (click to toggle)")
         self.settings["mode"] = self.model.mode
+        settings.save_settings(self.settings)
+
+    def toggle_subfolders(self):
+        self.settings["use_subfolders"] = not self.settings["use_subfolders"]
+        self.subfolders_button.config(text=f"Subfolders: {'On' if self.settings['use_subfolders'] else 'Off'}")
         settings.save_settings(self.settings)
 
     def toggle_info(self):
@@ -183,13 +194,29 @@ class ImageCategorizerApp:
         if not name:
             return
         name = name.strip()
-        if not name or "/" in name or name.startswith(".") or name in self.model.categories:
+        invalid = (
+            not name
+            or "/" in name
+            or name.startswith(".")
+            or name in self.model.categories
+            or any(c in name for c in '<>:"\\|?*')
+            or any(ord(c) < 32 for c in name)
+            or name.endswith(" ")
+            or name.endswith(".")
+        )
+        if invalid:
             messagebox.showerror("Invalid", f"'{name}' is not an acceptable category name.")
             return
         self.model.categories.append(name)
         self.settings["categories"] = list(self.model.categories)
+        try:
+            os.makedirs(os.path.join(self.source_dir, name), exist_ok=True)
+        except OSError as e:
+            self.model.categories.pop()
+            self.settings["categories"] = list(self.model.categories)
+            messagebox.showerror(WINDOW_TITLE, f"Error creating category folder: {e}")
+            return
         settings.save_settings(self.settings)
-        os.makedirs(os.path.join(self.source_dir, name), exist_ok=True)
         self._rebuild_category_buttons()
 
     # -- display -----------------------------------------------------------------

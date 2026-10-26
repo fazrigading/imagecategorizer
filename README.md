@@ -35,6 +35,15 @@ Progress (cursor position, processed list) is saved as
 reopening — even on another machine via sync — resumes where you stopped.
 App-wide preferences live in `~/.imagecategorizer/settings.json`.
 
+### Settings file
+
+Power users can hand-edit `~/.imagecategorizer/settings.json`. Currently
+the only key without a UI is `rename_pattern`: a Python format string
+applied when organizing (renaming) files into categories. Example:
+`"rename_pattern": "{category}_{idx:04d}{ext}"` turns `photo.jpg` into
+`infected_0001.jpg` when assigned to the `infected` category. Valid
+fields: `category`, `idx`, `ext`.
+
 ## Development
 
 ```bash
