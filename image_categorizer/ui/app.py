@@ -195,7 +195,7 @@ def build_app_bar(controller, page):
             )
         )
     actions.append(_theme_button(controller, page))
-    return ft.AppBar(leading=build_menu_bar(controller, page), title=counter,
+    return ft.AppBar(leading=build_menu_buttons(controller, page), title=counter,
                      center_title=True, actions=actions)
 
 
@@ -213,28 +213,6 @@ def _theme_button(controller, page):
         tooltip="Toggle dark/light theme",
         on_click=_toggle_theme,
     )
-
-
-def _open_dir_menu_item(controller, page):
-    label = "Open Directory..."
-    if not page.web:
-        return ft.MenuItemButton(
-            content=ft.Text(label),
-            on_click=_pick_dir_and_refresh(controller, page),
-        )
-    # Web cannot raise a native picker; nudge to the field in the app bar
-    return ft.MenuItemButton(content=ft.Text(label), on_click=lambda _e: None)
-
-
-def _exit_menu_item(page):
-    async def _exit(_e):
-        if not page.web and getattr(page, "window", None) is not None:
-            try:
-                await page.window.close()
-            except RuntimeError:
-                pass  # window may be unavailable in embedded/themeless runs
-
-    return ft.MenuItemButton(content=ft.Text("Exit"), on_click=_exit)
 
 
 def _counter_mode_items(controller, page):
@@ -255,83 +233,111 @@ def _counter_mode_items(controller, page):
             page.update()
 
         items.append(
-            ft.MenuItemButton(
-                content=ft.Text(label),
-                leading=ft.Icon(ft.Icons.CHECK if active else ft.Icons.CHECK_BOX_OUTLINE_BLANK),
-                on_click=_set,
-            )
+            ft.PopupMenuItem(content=ft.Text(label), checked=active, on_click=_set)
         )
     return items
 
 
-def build_menu_bar(controller, page):
-    def _meta_item():
-        def _toggle(_e):
-            controller.meta_shown = not controller.meta_shown
-            _refresh(page, controller)
-
-        return ft.MenuItemButton(
-            content=ft.Text("Show metadata"),
-            leading=ft.Icon(ft.Icons.INFO),
-            on_click=_toggle,
-        )
-
-    def _edit_categories():
-        def _open(_e):
-            page.show_dialog(_edit_categories_dialog(controller, page))
-
-        return ft.MenuItemButton(
-            content=ft.Text("Edit categories..."),
-            leading=ft.Icon(ft.Icons.EDIT),
-            on_click=_open,
-        )
-
-    def _about():
-        def _open(_e):
-            page.show_dialog(
-                ft.AlertDialog(
-                    title=ft.Text("Image Categorizer"),
-                    content=ft.Text(
-                        f"Gading's Image Categorizer v{__version__}\n\n"
-                        "Keyboard triage for image datasets, built with Flet.\n"
-                        "Help: see the keybinds listed in the project README."
-                    ),
-                    actions=[ft.TextButton("Close", on_click=lambda _e: page.pop_dialog())],
-                )
+def _about_dialog():
+    def _open(_e):
+        _state["page"].show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Image Categorizer"),
+                content=ft.Text(
+                    f"Gading's Image Categorizer v{__version__}\n\n"
+                    "Keyboard triage for image datasets, built with Flet.\n"
+                    "Help: see the keybinds listed in the project README."
+                ),
+                actions=[ft.TextButton("Close", on_click=lambda _e: _state["page"].pop_dialog())],
             )
-
-        return ft.MenuItemButton(
-            content=ft.Text("About..."),
-            leading=ft.Icon(ft.Icons.HELP),
-            on_click=_open,
         )
 
-    return ft.MenuBar(
-        controls=[
-            ft.SubmenuButton(
-                content=ft.Text("File"),
-                controls=[
-                    _open_dir_menu_item(controller, page),
-                    _exit_menu_item(page),
-                ],
+    return _open
+
+
+def build_menu_buttons(controller, page):
+    """App bar buttons replacing the old MenuBar: File / Edit / View / Help."""
+    def _edit_categories(_e):
+        page.show_dialog(_edit_categories_dialog(controller, page))
+
+    def _meta_toggle(_e):
+        controller.meta_shown = not controller.meta_shown
+        _refresh(page, controller)
+
+    def _popup(text, items, tooltip):
+        return ft.PopupMenuButton(
+            content=ft.Text(text),
+            items=items,
+            tooltip=tooltip,
+        )
+
+    return ft.Row(
+        [
+            _popup("File", [
+            (
+                ft.PopupMenuItem(
+                    content=ft.Text("Open Directory..."),
+                    icon=ft.Icons.FOLDER_OPEN,
+                    on_click=_pick_dir_and_refresh(controller, page)
+                    if not page.web
+                    else (lambda _e: None),  # web: native picker unsupported
+                )
             ),
-            ft.SubmenuButton(
-                content=ft.Text("Edit"),
-                controls=[_edit_categories()],
+            _exit_menu_item(page),
+        ], "File"),
+        _popup("Edit", [
+            ft.PopupMenuItem(
+                content=ft.Text("Edit categories..."),
+                icon=ft.Icons.EDIT,
+                on_click=_edit_categories,
             ),
-            ft.SubmenuButton(
-                content=ft.Text("View"),
-                controls=[
-                    *_counter_mode_items(controller, page),
-                    _meta_item(),
-                    _theme_button(controller, page),
-                ],
+        ], "Edit"),
+        _popup("View", [
+            *_counter_mode_items(controller, page),
+            ft.PopupMenuItem(
+                content=ft.Text("Show metadata"),
+                icon=ft.Icons.INFO,
+                on_click=_meta_toggle,
             ),
-            ft.SubmenuButton(
-                content=ft.Text("Help"),
-                controls=[_about()],
+            _theme_menu_item(controller, page),
+        ], "View"),
+        _popup("Help", [
+            ft.PopupMenuItem(
+                content=ft.Text("About..."),
+                icon=ft.Icons.HELP,
+                on_click=_about_dialog(),
             ),
-        ]
+        ], "Help"),
+        ],
+        spacing=8,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+
+def _exit_menu_item(page):
+    async def _exit(_e):
+        if not page.web and getattr(page, "window", None) is not None:
+            try:
+                await page.window.close()
+            except RuntimeError:
+                pass  # window may be unavailable in embedded/themeless runs
+
+    return ft.PopupMenuItem(content=ft.Text("Exit"), on_click=_exit)
+
+
+def _theme_menu_item(controller, page):
+    async def _toggle(_e):
+        controller.settings["theme"] = (
+            "light" if controller.settings.get("theme") == "dark" else "dark"
+        )
+        settings_mod.save_settings(controller.settings)
+        page.theme_mode = _theme_mode(controller.settings["theme"])
+        page.update()
+
+    return ft.PopupMenuItem(
+        content=ft.Text("Toggle dark/light theme"),
+        icon=ft.Icons.DARK_MODE,
+        on_click=_toggle,
     )
 
 
@@ -527,25 +533,47 @@ def build_top_bar(controller, page):
 
 
 def build_thumb_strip(controller, page):
-    async def _scroll(_e, delta):
-        row = _state["thumb_row"]
-        if row.controls:
-            await row.scroll_to(delta=delta, duration=200)
-
     row = ft.Row(scroll=ft.ScrollMode.AUTO, spacing=8, expand=True)
     row.controls = _thumb_controls(controller, page)
     _state["thumb_row"] = row
+    # flet awaits only handlers that are themselves coroutine functions
+    # (base_control.py:516) — lambdas returning a coroutine never get awaited.
     return ft.Row(
         [
-            ft.IconButton(ft.Icons.CHEVRON_LEFT, on_click=lambda e: _scroll(e, -360),
-                          tooltip="Scroll strip back"),
+            ft.IconButton(
+                ft.Icons.CHEVRON_LEFT,
+                on_click=_thumb_scroll_back,
+                tooltip="Scroll strip back",
+            ),
             row,
-            ft.IconButton(ft.Icons.CHEVRON_RIGHT, on_click=lambda e: _scroll(e, 360),
-                          tooltip="Scroll strip forward"),
+            ft.IconButton(
+                ft.Icons.CHEVRON_RIGHT,
+                on_click=_thumb_scroll_forward,
+                tooltip="Scroll strip forward",
+            ),
         ],
         spacing=4,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
+
+
+def _thumb_row():
+    row = _state.get("thumb_row")
+    if row is not None and row.controls:
+        return row
+    return None
+
+
+async def _thumb_scroll_back(_e):
+    row = _thumb_row()
+    if row is not None:
+        await row.scroll_to(delta=-360, duration=200)
+
+
+async def _thumb_scroll_forward(_e):
+    row = _thumb_row()
+    if row is not None:
+        await row.scroll_to(delta=360, duration=200)
 
 
 def _thumb_controls(controller, page):
