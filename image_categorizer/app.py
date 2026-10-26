@@ -6,6 +6,7 @@ from PIL import Image, ImageTk
 from . import __version__, settings
 from .categorizer import Categorizer
 from .model import SessionModel
+from .viewer import Viewer
 
 WINDOW_TITLE = f"Gading's Image Categorizer v{__version__}"
 
@@ -51,6 +52,7 @@ class ImageCategorizerApp:
             self.root.bind(f"<Key-{key}>", lambda e, k=int(key): self.on_category_key(k))
         self.root.bind("<Key-s>", lambda e: self.skip())
         self.root.bind("<Key-u>", lambda e: self.undo())
+        self.root.bind("<Key-r>", lambda e: self.viewer.rotate() if self.viewer else None)
         self.root.focus_set()
 
         if self.settings["last_dir"] and os.path.isdir(self.settings["last_dir"]):
@@ -192,8 +194,8 @@ class ImageCategorizerApp:
 
 def main():
     root = Tk()
-    ImageCategorizerApp(root)
     root.configure(background="black")
+    ImageCategorizerApp(root, viewer=Viewer(root))
     root.mainloop()
 
 
