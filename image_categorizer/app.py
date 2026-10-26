@@ -5,6 +5,7 @@ from PIL import Image, ImageTk
 
 from . import __version__, settings
 from .categorizer import Categorizer
+from .metadata import describe
 from .model import SessionModel
 from .viewer import Viewer
 
@@ -47,12 +48,16 @@ class ImageCategorizerApp:
 
         self.image_status = Label(self.root, text="Select a directory")
         self.image_status.pack(side="bottom")
+        self.info_shown = False
+        self.info_label = Label(self.root, justify="left", anchor="w", fg="white")
+        self.info_label.pack(side="bottom", fill="x")
 
         for key in "123456789":
             self.root.bind(f"<Key-{key}>", lambda e, k=int(key): self.on_category_key(k))
         self.root.bind("<Key-s>", lambda e: self.skip())
         self.root.bind("<Key-u>", lambda e: self.undo())
         self.root.bind("<Key-r>", lambda e: self.viewer.rotate() if self.viewer else None)
+        self.root.bind("<Key-i>", lambda e: self.toggle_info())
         self.root.focus_set()
 
         if self.settings["last_dir"] and os.path.isdir(self.settings["last_dir"]):
@@ -134,6 +139,16 @@ class ImageCategorizerApp:
         self.settings["mode"] = self.model.mode
         settings.save_settings(self.settings)
 
+    def toggle_info(self):
+        if self.model.current() is None:
+            return
+        if self.info_shown:
+            self.info_shown = False
+            self.info_label["text"] = ""
+        else:
+            self.info_shown = True
+            self.info_label["text"] = describe(self.model.current())
+
     def _state(self) -> dict:
         return {"cursor": self.model.cursor, "processed": sorted(self.model.processed)}
 
@@ -179,6 +194,8 @@ class ImageCategorizerApp:
 
     # -- display -----------------------------------------------------------------
     def display_image(self):
+        if self.info_shown and self.model.current() is not None:
+            self.info_label["text"] = describe(self.model.current())
         if self.viewer is not None:
             self.viewer.show(self.model.current())
             return
