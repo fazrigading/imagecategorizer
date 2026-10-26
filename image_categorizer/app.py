@@ -96,7 +96,7 @@ class ImageCategorizerApp:
             self.handle_category(self.model.categories[idx - 1])
 
     def handle_category(self, category: str):
-        if self.categorizer is None:
+        if self.categorizer is None or self.model.finished():
             return
         try:
             self.categorizer.handle(category, self.source_dir)
@@ -109,7 +109,7 @@ class ImageCategorizerApp:
         if self.model.finished():
             messagebox.showinfo(WINDOW_TITLE, "No more images.")
 
-    def skip(self):
+    def skip(self, *_args):
         if self.categorizer is None or self.model.finished():
             return
         self.categorizer.skip(self.source_dir)
