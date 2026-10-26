@@ -51,12 +51,18 @@ outside to blur the field before using the shortcuts.
 
 On-screen equivalents exist for everything: category buttons (1–9), Skip
 and Undo buttons, the filter field, the metadata strip toggle is implicit
-in the strip, and clicking a thumbnail in the strip jumps to that image.
+in the strip, and clicking a thumbnail in the strip jumps to that image
+(chevron buttons scroll the strip back/forward).
+
+A menu bar (File / Edit / View / Help) sits top-left: open a directory,
+exit, edit categories, switch the middle-top counter between simple
+(x/y), per-category counts, or both, toggle metadata, and About.
 
 The **mode** switch toggles copy vs move and **subfolders** switch
 includes subdirectories on the next directory open; both persist.
 "+ Add category" creates the destination folder on disk and its button
-instantly.
+instantly. "Edit categories..." renames or deletes chips via the Edit
+menu — folders and already-categorized files on disk are never touched.
 
 ## Storage
 
